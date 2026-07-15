@@ -1410,6 +1410,7 @@ fun LyricLineRow(
         if (isCurrentLine) {
             context.sendBroadcast(
                 android.content.Intent("com.lostf1sh.pixelplayeross.UPDATE_LYRIC")
+                .setPackage(context.packageName)
                     .putExtra("lyric", sanitizedLine)
             )
         }
