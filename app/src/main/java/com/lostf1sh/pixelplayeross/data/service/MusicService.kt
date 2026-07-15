@@ -1,5 +1,13 @@
 package com.lostf1sh.pixelplayeross.data.service
-
+// ====== 新增：歌词包装器和广播接收器 ======
+    private var lyricPlayerWrapper: BluetoothLyricPlayerWrapper? = null
+    private val lyricReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            val lyric = intent?.getStringExtra("lyric") ?: ""
+            lyricPlayerWrapper?.currentLyric = lyric
+        }
+    }
+    // ===========================================
 import android.app.AlarmManager
 import android.app.BackgroundServiceStartNotAllowedException
 import android.app.ForegroundServiceStartNotAllowedException
@@ -260,7 +268,30 @@ class MusicService : MediaLibraryService() {
     }
 
     private val playerSwapListener: (Player) -> Unit = { newPlayer ->
-        publishMediaSessionPlayer(newPlayer, "Swapped MediaSession player to new instance.")
+        private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
+        val session = mediaSession ?: return
+        val oldPlayer = session.player
+        // 取出真正被包裹的旧播放器
+        val actualOldPlayer = (oldPlayer as? BluetoothLyricPlayerWrapper)?.wrappedPlayer ?: oldPlayer
+
+        if (actualOldPlayer !== player) {
+            actualOldPlayer.removeListener(playerListener)
+            
+            // 重新包裹新的切歌播放器，并继承上一句歌词
+            val lastLyric = lyricPlayerWrapper?.currentLyric ?: ""
+            lyricPlayerWrapper = BluetoothLyricPlayerWrapper(player).apply {
+                currentLyric = lastLyric
+            }
+            session.player = lyricPlayerWrapper!!
+            
+            player.addListener(playerListener)
+        }
+
+        Timber.tag("MusicService").d(logMessage)
+        syncLocalListeningStatsFromPlayer(player)
+        requestWidgetFullUpdate(force = true)
+        refreshMediaSessionUi(session)
+    }
         prepareReplayGainForTransitionPlayer(newPlayer)
         applyPlaybackSpeed(newPlayer)
     }
@@ -745,8 +776,18 @@ class MusicService : MediaLibraryService() {
             }
         }
 
-        mediaSession = MediaLibrarySession.Builder(this, engine.masterPlayer, callback)
-            .setSessionActivity(getOpenAppPendingIntent())
+        // ====== 新增注册广播 ======
+val filter = android.content.IntentFilter("com.lostf1sh.pixelplayeross.UPDATE_LYRIC")
+if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+    registerReceiver(lyricReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+} else {
+    registerReceiver(lyricReceiver, filter)
+}
+// ====== 修改 Session 绑定拦截器 ======
+lyricPlayerWrapper = BluetoothLyricPlayerWrapper(engine.masterPlayer)
+mediaSession = MediaLibrarySession.Builder(this, lyricPlayerWrapper!!, callback)
+    .setSessionActivity(getOpenAppPendingIntent())
+// ... （保留后续的 .setBitmapLoader 等配置不变）
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
             .build()
 
@@ -1054,6 +1095,7 @@ class MusicService : MediaLibraryService() {
         serviceScope.cancel()
         Thread.currentThread().setUncaughtExceptionHandler(previousMainThreadExceptionHandler)
         previousMainThreadExceptionHandler = null
+        unregisterReceiver(lyricReceiver) // 新增这行
         super.onDestroy()
     }
 
@@ -2744,3 +2786,40 @@ class MusicService : MediaLibraryService() {
         return future
     }
 }
+// ================= 车载蓝牙歌词功能新增代码 =================
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+class BluetoothLyricPlayerWrapper(val wrappedPlayer: androidx.media3.common.Player) : androidx.media3.common.ForwardingPlayer(wrappedPlayer) {
+    private val mListeners = java.util.concurrent.CopyOnWriteArraySet<androidx.media3.common.Player.Listener>()
+    var currentLyric: String = ""
+        set(value) {
+            if (field != value) {
+                field = value
+                // 当歌词发生变化时，主动通知 MediaSession 刷新车机和通知栏的媒体信息
+                val newMetadata = mediaMetadata
+                mListeners.forEach { it.onMediaMetadataChanged(newMetadata) }
+            }
+        }
+
+    override fun addListener(listener: androidx.media3.common.Player.Listener) {
+        super.addListener(listener)
+        mListeners.add(listener)
+    }
+
+    override fun removeListener(listener: androidx.media3.common.Player.Listener) {
+        super.removeListener(listener)
+        mListeners.remove(listener)
+    }
+
+    // 拦截并篡改发给车机/通知栏的歌曲信息
+    override fun getMediaMetadata(): androidx.media3.common.MediaMetadata {
+        val original = super.getMediaMetadata()
+        if (currentLyric.isNotBlank()) {
+            // 酷狗模式：将歌词拼接到歌曲名后面发送给车机
+            return original.buildUpon()
+                .setTitle("${original.title ?: ""} - $currentLyric")
+                .build()
+        }
+        return original
+    }
+}
+// ============================================================

@@ -125,7 +125,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.lostf1sh.pixelplayeross.data.preferences.dataStore
-
+import androidx.compose.runtime.LaunchedEffect
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -1405,6 +1405,17 @@ fun LyricLineRow(
     val isCurrentLine by remember(position, line.time, lineEndTime) {
         derivedStateOf { position in line.time.toLong()..<lineEndTime }
     }
+    val context = LocalContext.current
+    LaunchedEffect(isCurrentLine) { 
+        if (isCurrentLine) {
+            context.sendBroadcast(
+                android.content.Intent("com.lostf1sh.pixelplayeross.UPDATE_LYRIC")
+                    .putExtra("lyric", sanitizedLine)
+            )
+        }
+    }
+
+
     val unhighlightedColor = LocalContentColor.current.copy(alpha = 0.45f)
     val lineColor by animateColorAsState(
         targetValue = if (isCurrentLine) accentColor else unhighlightedColor,
