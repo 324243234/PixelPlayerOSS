@@ -1218,6 +1218,39 @@ fun SyncedLyricsList(
             resolveCurrentLineIndex(lines = lines, position = position)
         }
     }
+// 👇 最终整理版：处理原文高亮、翻译换行(不高亮)、抓取 4 行发送 👇
+    val context = LocalContext.current
+    LaunchedEffect(currentLineIndex) {
+        fun buildText(index: Int, isCurrent: Boolean): String {
+            if (index < 0 || index >= lines.size) return " " // 空白行留空
+            
+            val line = lines[index]
+            val text = sanitizeLyricLineText(line.line)
+            
+            // 核心 1：只有正在唱的这一句，原文前面才加 ▶ 高亮
+            val formattedOriginal = if (isCurrent) "▶ $text" else text
+
+            return if (showTranslation && !line.translation.isNullOrBlank()) {
+                // 核心 2：翻译部分正常拼接在下一行，绝对不会带有 ▶ 高亮
+                "$formattedOriginal\n${line.translation}" 
+            } else {
+                formattedOriginal
+            }
+        }
+
+        // 打包发送 4 句歌词，强制指定包名防拦截
+        context.sendBroadcast(
+            android.content.Intent("com.lostf1sh.pixelplayeross.UPDATE_LYRIC")
+                .setPackage(context.packageName)
+                .putExtra("lyric_prev", buildText(currentLineIndex - 1, false))       // 上一句
+                .putExtra("lyric_current", buildText(currentLineIndex, true))         // 当前句（原文带高亮）
+                .putExtra("lyric_next", buildText(currentLineIndex + 1, false))       // 下一句
+                .putExtra("lyric_next2", buildText(currentLineIndex + 2, false))      // 下两句
+        )
+    }
+    // 👆 替换结束 👆
+
+
     var hasAlignedInitialLine by remember(lines) { mutableStateOf(false) }
     var lastAutoScrolledLineIndex by remember(lines) { mutableIntStateOf(-1) }
 
@@ -1405,16 +1438,7 @@ fun LyricLineRow(
     val isCurrentLine by remember(position, line.time, lineEndTime) {
         derivedStateOf { position in line.time.toLong()..<lineEndTime }
     }
-    val context = LocalContext.current
-    LaunchedEffect(isCurrentLine) { 
-        if (isCurrentLine) {
-            context.sendBroadcast(
-                android.content.Intent("com.lostf1sh.pixelplayeross.UPDATE_LYRIC")
-                .setPackage(context.packageName)
-                    .putExtra("lyric", sanitizedLine)
-            )
-        }
-    }
+
 
 
     val unhighlightedColor = LocalContentColor.current.copy(alpha = 0.45f)

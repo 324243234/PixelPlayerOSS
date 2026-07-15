@@ -136,12 +136,17 @@ suspend fun loadArtworkBytesViaCoil(context: Context, uri: Uri): ByteArray? {
 @AndroidEntryPoint
 class MusicService : MediaLibraryService() {
 
-    // ====== 新增：歌词包装器和广播接收器 ======
+// ====== 车载歌词功能：后台接收 4 行数据 ======
     private var lyricPlayerWrapper: BluetoothLyricPlayerWrapper? = null
     private val lyricReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            val lyric = intent?.getStringExtra("lyric") ?: ""
-            lyricPlayerWrapper?.currentLyric = lyric
+            if (intent != null) {
+                val prev = intent.getStringExtra("lyric_prev") ?: " "
+                val curr = intent.getStringExtra("lyric_current") ?: " "
+                val next = intent.getStringExtra("lyric_next") ?: " "
+                val next2 = intent.getStringExtra("lyric_next2") ?: " "
+                lyricPlayerWrapper?.updateLyrics(prev, curr, next, next2)
+            }
         }
     }
     // ===========================================
@@ -2157,18 +2162,28 @@ class MusicService : MediaLibraryService() {
     }
 }
 
-// ================= 车载蓝牙歌词功能新增代码 =================
+// ================= 车载蓝牙歌词功能：终极排版伪装器 =================
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class BluetoothLyricPlayerWrapper(player: androidx.media3.common.Player) : androidx.media3.common.ForwardingPlayer(player) {
     private val mListeners = java.util.concurrent.CopyOnWriteArraySet<androidx.media3.common.Player.Listener>()
-    var currentLyric: String = ""
-        set(value) {
-            if (field != value) {
-                field = value
-                val newMetadata = mediaMetadata
-                mListeners.forEach { it.onMediaMetadataChanged(newMetadata) }
-            }
+    
+    var prevLyric: String = " "
+    var currentLyric: String = " "
+    var nextLyric: String = " "
+    var next2Lyric: String = " "
+
+    fun updateLyrics(prev: String, curr: String, next: String, next2: String) {
+        if (currentLyric != curr) {
+            prevLyric = prev
+            currentLyric = curr
+            nextLyric = next
+            next2Lyric = next2
+            
+            // 通知车机屏幕刷新
+            val newMetadata = mediaMetadata
+            mListeners.forEach { it.onMediaMetadataChanged(newMetadata) }
         }
+    }
 
     override fun addListener(listener: androidx.media3.common.Player.Listener) {
         super.addListener(listener)
@@ -2180,11 +2195,29 @@ class BluetoothLyricPlayerWrapper(player: androidx.media3.common.Player) : andro
         mListeners.remove(listener)
     }
 
+    // 核心篡改逻辑：精准控制 上、中、下 三个位置
     override fun getMediaMetadata(): androidx.media3.common.MediaMetadata {
         val original = super.getMediaMetadata()
-        if (currentLyric.isNotBlank()) {
+        
+        if (currentLyric.isNotBlank() && currentLyric != " ") {
+            
+            // 把未唱的下两句，用换行符连成一个整体
+            val combinedNext = if (next2Lyric.isNotBlank() && next2Lyric != " ") {
+                "$nextLyric\n$next2Lyric"
+            } else {
+                nextLyric
+            }
+
             return original.buildUpon()
-                .setTitle("${original.title ?: ""} - $currentLyric")
+                // 【最上面 (Title 字段)】：显示已唱的上一句
+                .setTitle(prevLyric)
+                
+                // 【中间 (Artist 字段)】：显示正在唱的当前句（因第一步处理，自带高亮）
+                .setArtist(currentLyric)
+                
+                // 【最下面 (Album 字段)】：显示未唱的后两句
+                .setAlbumTitle(combinedNext)
+                
                 .build()
         }
         return original
