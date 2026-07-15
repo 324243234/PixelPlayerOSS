@@ -77,9 +77,7 @@ android {
         versionName = (project.findProperty("APP_VERSION_NAME") as? String) ?: "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-		ndk {
-            abiFilters.add("arm64-v8a")
-        }
+		 
     }
 
     signingConfigs {
@@ -146,7 +144,7 @@ android {
             isEnable = enableAbiSplits
             reset()
             if (enableAbiSplits) {
-                include("arm64-v8a", "armeabi-v7a")
+                include("arm64-v8a")
                 isUniversalApk = false
             }
         }
