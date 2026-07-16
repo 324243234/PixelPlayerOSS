@@ -1319,7 +1319,7 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                             // 记录上一次显示的索引，防止屏幕无效狂刷
                             var lastRenderedIndex = -1
 
-                            while (kotlinx.coroutines.isActive) {
+                            while (true) {
                                 val player = mediaSession?.player ?: engine.masterPlayer
                                 
                                 // 🚀 优化2：【降低空转能耗】歌曲暂停时，极大降低检查频率，避免无意义的 CPU 浪费
