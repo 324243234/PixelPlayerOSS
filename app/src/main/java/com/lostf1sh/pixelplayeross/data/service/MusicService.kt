@@ -1282,19 +1282,21 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
             }
         }
 
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        // 👇 ====== 3. 车载后台歌词引擎：切歌时自动抓取并启动滚动 ====== 👇
+override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // 👇 ====== 3. 车载后台歌词引擎：切歌时自动抓取并启动滚动 ====== 👇
             lyricUpdateJob?.cancel() // 切歌时停掉上一首的计算
             lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ") // 清空车机屏幕
             
             if (mediaItem != null) {
-                // 在后台线程启动歌词获取与滚动引擎
-                lyricUpdateJob = serviceScope.launch(Dispatchers.IO) {
+                // ⚠️ 修复点：必须在 Main 主线程启动，因为 Media3 严禁在后台线程读取播放进度！
+                lyricUpdateJob = serviceScope.launch {
                     val songId = mediaItem.mediaId
-                    // 纯后台从底层数据库获取 Song 和 Lyrics 对象
-                    val song = musicRepository.getSong(songId).first()
+                    
+                    // ⚠️ 修复点：仅仅把“查数据库”这一个耗时动作切入 IO 后台线程，查完立刻回到主线程
+                    val song = withContext(Dispatchers.IO) { musicRepository.getSong(songId).first() }
+                    
                     if (song != null) {
-                        val lyrics = musicRepository.getLyrics(song)
+                        val lyrics = withContext(Dispatchers.IO) { musicRepository.getLyrics(song) }
                         val syncedLines = lyrics?.synced
                         
                         // 如果这首歌有滚动歌词，启动无限循环引擎
@@ -1349,6 +1351,8 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
                 }
             }
             // 👆 ======================= 引擎植入完毕 ======================= 👆
+
+            
             syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer, forceNewSession = true)
             if (isNavidromeMediaItem(mediaItem)) {
                 reportNavidromePlayback("starting")
