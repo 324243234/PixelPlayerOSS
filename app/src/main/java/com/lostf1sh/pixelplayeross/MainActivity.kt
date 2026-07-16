@@ -1,7 +1,8 @@
 package com.lostf1sh.pixelplayeross
 
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
-
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
@@ -719,7 +720,10 @@ class MainActivity : ComponentActivity() {
         ) {
 
                 Scaffold(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                        .fillMaxSize() // 先铺满屏幕以占据空间
+                        .wrapContentWidth(Alignment.CenterHorizontally) // 解除强制横向拉伸，并让它在屏幕中间对齐
+                        .widthIn(max = 840.dp), // 终极安全锁：最宽绝对不允许超过 840dp！
                 bottomBar = {
                     if (shouldRenderNavigationBar) {
                         val currentSongId by remember {
