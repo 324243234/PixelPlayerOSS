@@ -27,8 +27,11 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PixelPlayer-Release-APK
-          path: app/build/outputs/apk/**/*.apk
+  - name: Auto Release Direct APK
+      uses: marvinpinto/action-automatic-releases@latest
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest"
+        prerelease: true
+        title: "PixelPlayer测试"
+        files: app/build/outputs/apk/release/*.apk

@@ -1283,68 +1283,91 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
         }
 
 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            // 👇 ====== 3. 车载后台歌词引擎：切歌时自动抓取并启动滚动 ====== 👇
+            // 👇 ====== 3. 车载后台歌词引擎：终极性能优化版 ====== 👇
             lyricUpdateJob?.cancel() // 切歌时停掉上一首的计算
             lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ") // 清空车机屏幕
             
             if (mediaItem != null) {
-                // ⚠️ 修复点：必须在 Main 主线程启动，因为 Media3 严禁在后台线程读取播放进度！
+                // 必须在 Main 主线程启动，Media3 严禁在后台读取播放进度
                 lyricUpdateJob = serviceScope.launch {
                     val songId = mediaItem.mediaId
                     
-                    // ⚠️ 修复点：仅仅把“查数据库”这一个耗时动作切入 IO 后台线程，查完立刻回到主线程
+                    // 仅把耗时的数据库读取切入 IO 线程
                     val song = withContext(Dispatchers.IO) { musicRepository.getSong(songId).first() }
                     
                     if (song != null) {
                         val lyrics = withContext(Dispatchers.IO) { musicRepository.getLyrics(song) }
                         val syncedLines = lyrics?.synced
                         
-                        // 如果这首歌有滚动歌词，启动无限循环引擎
+                        // 如果有滚动歌词，启动引擎
                         if (!syncedLines.isNullOrEmpty()) {
-                            while (true) {
-                                val player = mediaSession?.player ?: engine.masterPlayer
-                                if (player.isPlaying) {
-                                    val position = player.currentPosition
+                            
+                            // 🚀 优化1：【内存与CPU释放】在循环外“一次性”清洗所有歌词文本
+                            // 彻底消除原本每秒十几次的正则匹配和字符串频繁拼接！
+                            val preProcessedTexts = syncedLines.map { line ->
+                                val cleanText = com.lostf1sh.pixelplayeross.utils.LyricsUtils.stripLrcTimestamps(line.line)
+                                    .replace(Regex("^v\\d+:\\s*", RegexOption.IGNORE_CASE), "")
+                                    .trimStart()
                                     
-                                    // 算时间：找出当前是哪一句
-                                    var currentIndex = -1
-                                    for (i in syncedLines.indices) {
-                                        val currentLineTime = syncedLines[i].time.toLong()
-                                        val nextLineTime = syncedLines.getOrNull(i + 1)?.time?.toLong() ?: Long.MAX_VALUE
-                                        if (position in currentLineTime until nextLineTime) {
-                                            currentIndex = i
-                                            break
-                                        }
-                                    }
-                                    
-                                    // 算排版：推给车机
-                                    if (currentIndex != -1) {
-                                        fun buildText(index: Int, isCurrent: Boolean): String {
-                                            if (index < 0 || index >= syncedLines.size) return " "
-                                            val line = syncedLines[index]
-                                            // 自动清洗时间轴代码
-                                            val cleanText = com.lostf1sh.pixelplayeross.utils.LyricsUtils.stripLrcTimestamps(line.line)
-                                                .replace(Regex("^v\\d+:\\s*", RegexOption.IGNORE_CASE), "")
-                                                .trimStart()
-                                                
-                                            val formattedOriginal = if (isCurrent) "▶ $cleanText" else cleanText
-                                            return if (!line.translation.isNullOrBlank()) {
-                                                "$formattedOriginal\n${line.translation}"
-                                            } else {
-                                                formattedOriginal
-                                            }
-                                        }
+                                if (!line.translation.isNullOrBlank()) {
+                                    "$cleanText\n${line.translation}"
+                                } else {
+                                    cleanText
+                                }
+                            }
 
-                                        lyricPlayerWrapper?.updateLyrics(
-                                            buildText(currentIndex - 1, false),
-                                            buildText(currentIndex, true),
-                                            buildText(currentIndex + 1, false),
-                                            buildText(currentIndex + 2, false)
-                                        )
+                            // 记录上一次显示的索引，防止屏幕无效狂刷
+                            var lastRenderedIndex = -1
+
+                            while (kotlinx.coroutines.isActive) {
+                                val player = mediaSession?.player ?: engine.masterPlayer
+                                
+                                // 🚀 优化2：【降低空转能耗】歌曲暂停时，极大降低检查频率，避免无意义的 CPU 浪费
+                                if (!player.isPlaying) {
+                                    kotlinx.coroutines.delay(1000)
+                                    continue
+                                }
+
+                                val position = player.currentPosition
+                                var currentIndex = -1
+                                var timeToNextLine = Long.MAX_VALUE
+                                
+                                // 找当前是哪一句，并计算距离下一句还有多少毫秒
+                                for (i in syncedLines.indices) {
+                                    val currentLineTime = syncedLines[i].time.toLong()
+                                    val nextLineTime = syncedLines.getOrNull(i + 1)?.time?.toLong() ?: Long.MAX_VALUE
+                                    if (position in currentLineTime until nextLineTime) {
+                                        currentIndex = i
+                                        timeToNextLine = nextLineTime - position
+                                        break
                                     }
                                 }
-                                // 每 300 毫秒检测一次进度，性能消耗极微
-                                kotlinx.coroutines.delay(300)
+                                
+                                // 🚀 优化3：【零无效排版】只在歌词行发生“真实跳变”时，才发送给车机刷新，降低蓝牙带宽占用
+                                if (currentIndex != -1 && currentIndex != lastRenderedIndex) {
+                                    lastRenderedIndex = currentIndex
+                                    
+                                    fun getText(index: Int): String {
+                                        return if (index in preProcessedTexts.indices) preProcessedTexts[index] else " "
+                                    }
+
+                                    lyricPlayerWrapper?.updateLyrics(
+                                        getText(currentIndex - 1),
+                                        getText(currentIndex),
+                                        getText(currentIndex + 1),
+                                        getText(currentIndex + 2)
+                                    )
+                                }
+                                
+                                // 🚀 优化4：【彻底消灭慢一拍】动态智能休眠算法
+                                // 离下一句越近，刷新频率越高（最高达到 50ms 级别）；离得远就保持 200ms。
+                                // 既保证了歌词跳变时的极高精确度，又在长句时节省了性能！
+                                if (currentIndex != -1 && timeToNextLine != Long.MAX_VALUE) {
+                                    val sleepTime = timeToNextLine.coerceIn(50L, 200L)
+                                    kotlinx.coroutines.delay(sleepTime)
+                                } else {
+                                    kotlinx.coroutines.delay(200)
+                                }
                             }
                         }
                     }
@@ -1352,7 +1375,6 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             }
             // 👆 ======================= 引擎植入完毕 ======================= 👆
 
-            
             syncLocalListeningStatsFromPlayer(mediaSession?.player ?: engine.masterPlayer, forceNewSession = true)
             if (isNavidromeMediaItem(mediaItem)) {
                 reportNavidromePlayback("starting")
