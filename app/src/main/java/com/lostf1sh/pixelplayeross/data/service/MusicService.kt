@@ -762,14 +762,13 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
 
 // 👇 ====== 2. 包装播放器 ====== 👇
         lyricPlayerWrapper = BluetoothLyricPlayerWrapper(engine.masterPlayer)
-        mediaSession = MediaLibrarySession.Builder(this, lyricPlayerWrapper!!, callback)
+        // 给编译器一个明确的 Player 类型，防止 Builder 链式调用断裂
+        val wrappedPlayer: androidx.media3.common.Player = lyricPlayerWrapper!!
+        mediaSession = MediaLibrarySession.Builder(this, wrappedPlayer, callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
             .build()
         // 👆 ========================== 👆
-            .setSessionActivity(getOpenAppPendingIntent())
-            .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
-            .build()
 
         val localOnlyProvider = LocalOnlyMediaNotificationProvider(this).also {
             it.setSmallIcon(R.drawable.monochrome_player)
@@ -1300,7 +1299,7 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
                         
                         // 如果这首歌有滚动歌词，启动无限循环引擎
                         if (!syncedLines.isNullOrEmpty()) {
-                            while (kotlinx.coroutines.isActive) {
+                            while (true) {
                                 val player = mediaSession?.player ?: engine.masterPlayer
                                 if (player.isPlaying) {
                                     val position = player.currentPosition
