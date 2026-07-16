@@ -2836,7 +2836,7 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
 }
 // 👇 ====== 4. 车载蓝牙歌词功能：终极排版伪装器 ====== 👇
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class BluetoothLyricPlayerWrapper(val wrappedPlayer: androidx.media3.common.Player) : androidx.media3.common.ForwardingPlayer(wrappedPlayer) {
+class BluetoothLyricPlayerWrapper(player: androidx.media3.common.Player) : androidx.media3.common.ForwardingPlayer(player) {
     private val mListeners = java.util.concurrent.CopyOnWriteArraySet<androidx.media3.common.Player.Listener>()
     
     var prevLyric: String = " "
