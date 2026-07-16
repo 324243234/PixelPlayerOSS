@@ -27,11 +27,12 @@ jobs:
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
-  - name: Auto Release Direct APK
-      uses: marvinpinto/action-automatic-releases@latest
-      with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        automatic_release_tag: "latest"
-        prerelease: true
-        title: "PixelPlayer测试"
-        files: app/build/outputs/apk/release/*.apk
+      # 👇 下面这一块的缩进已经帮你完美对齐了，必须和上面对齐
+      - name: Auto Release Direct APK
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "PixelPlayer测试"
+          files: app/build/outputs/apk/release/*.apk
