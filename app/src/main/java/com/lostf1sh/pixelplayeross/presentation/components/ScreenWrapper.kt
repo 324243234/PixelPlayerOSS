@@ -126,7 +126,7 @@ fun ScreenWrapper(
     // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
     val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
     // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
-    val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
+    
     val dimAlpha by animateFloatAsState(
         targetValue = targetDim,
         animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
