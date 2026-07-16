@@ -1,5 +1,8 @@
 package com.lostf1sh.pixelplayeross.presentation.components
 
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -122,6 +125,8 @@ fun ScreenWrapper(
 
     // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
     val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
+    // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
+    val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
     val dimAlpha by animateFloatAsState(
         targetValue = targetDim,
         animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
@@ -131,38 +136,6 @@ fun ScreenWrapper(
     Box(
         modifier = modifier
             .fillMaxSize()
-            // Keep both the graphicsLayer modifier AND its compositingStrategy stable across
-            // the full lifecycle of the screen. Toggling the strategy between Auto and
-            // Offscreen mid-transition (when cornerRadius crosses the threshold) causes the
-            // RenderNode's rendering mode to flip for one frame, producing a subtle flash on
-            // the outgoing screen right as the animation starts. Main root tab switches are
-            // the exception: Home/Search/Library keep the same slide/fade transition, but skip
-            // the expensive offscreen depth layer while no deeper screen is visible.
-            .graphicsLayer {
-                compositingStrategy = if (shouldRunDepthEffects) {
-                    CompositingStrategy.Offscreen
-                } else {
-                    CompositingStrategy.Auto
-                }
-                if (shouldRunDepthEffects && cornerRadius > 0.5f) {
-                    this.shape = RoundedCornerShape(cornerRadius.dp)
-                    this.clip = true
-                } else {
-                    this.clip = false
-                }
-            }
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        content()
-
-        // Dim Layer Overlay
-        // Always composed with alpha-driven visibility instead of a conditional node.
-        // Conditionally adding/removing this Box when dimAlpha crosses 0 added a node to
-        // the composition tree mid-transition and contributed to the outgoing-screen flash.
-        Box(
-        modifier = modifier
-            .fillMaxSize()
-            // ... (中间的 graphicsLayer 保持原样不变) ...
             .graphicsLayer {
                 compositingStrategy = if (shouldRunDepthEffects) {
                     CompositingStrategy.Offscreen
@@ -177,28 +150,22 @@ fun ScreenWrapper(
                 }
             }
             .background(MaterialTheme.colorScheme.background),
-        // 👇 1. 强行让全局页面的内容在平板上居中！
-        contentAlignment = Alignment.TopCenter 
+        contentAlignment = Alignment.TopCenter
     ) {
-        
-        // 👇 2. 新增一个内层容器，锁死整个 App 所有页面的最大宽度为 840dp！
         Box(
             modifier = Modifier
-                .widthIn(max = 840.dp) // 平板上的“安全展示宽度”
+                .widthIn(max = 840.dp)
                 .fillMaxHeight()
         ) {
-            content() // 这里面就是你的 HomeScreen, StatsScreen, DailyMixScreen 等所有页面
+            content()
         }
 
-        // Dim Layer Overlay (全局变暗遮罩)
+        // Dim Layer Overlay
         Box(
             modifier = Modifier
-                .fillMaxSize() // 遮罩依然铺满整个屏幕
+                .fillMaxSize()
                 .graphicsLayer { alpha = dimAlpha }
                 .background(Color.Black)
-        )
-    }
-}
         )
     }
 }
