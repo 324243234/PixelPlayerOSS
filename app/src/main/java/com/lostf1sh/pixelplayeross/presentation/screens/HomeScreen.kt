@@ -1,5 +1,8 @@
 package com.lostf1sh.pixelplayeross.presentation.screens
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafelyReplacing
 
@@ -327,6 +330,8 @@ fun HomeScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .wrapContentWidth(Alignment.CenterHorizontally) // 👈 1. 打破平板的强制横向拉伸
+                    .widthIn(max = 840.dp)                          // 👈 2. 锁死最大宽度
                     .background(MaterialTheme.colorScheme.background),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding(),
@@ -665,7 +670,9 @@ fun YourMixHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(256.dp)
+            .wrapContentWidth(Alignment.CenterHorizontally) // 👈 1. 打破拉伸并居中
+                .widthIn(max = 840.dp)                          // 👈 2. 锁死最大宽度
+                .heightIn(min = 160.dp, max = 256.dp)           // 👈 3. 解除写死的高度，变为弹性
             .padding(16.dp)
     ) {
         Column(
