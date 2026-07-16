@@ -2889,23 +2889,34 @@ class BluetoothLyricPlayerWrapper(player: androidx.media3.common.Player) : andro
         mListeners.remove(listener)
     }
 
-    // 核心篡改逻辑：确保“当前正在唱的”字体最大且高亮
+// 核心篡改逻辑：顺应车机硬件，完美瀑布流下滚，防间奏闪烁
     override fun getMediaMetadata(): androidx.media3.common.MediaMetadata {
         val original = super.getMediaMetadata()
         
-        if (currentLyric.isNotBlank() && currentLyric != " ") {
+        // 判断当前是否有歌词正在排队（只要有任意一句不是空的，说明这首歌有歌词且正在运行）
+        val hasActiveLyrics = currentLyric.isNotBlank() || 
+                              nextLyric.isNotBlank() || 
+                              next2Lyric.isNotBlank()
+        
+        if (hasActiveLyrics) {
+            // 如果当前句为空（比如前奏或间奏），用音符代替，死死霸占最大号字体的位置，防止排版错乱
+            val displayTitle = if (currentLyric.isBlank()) "🎵 ~" else currentLyric
+            val displayArtist = if (nextLyric.isBlank()) " " else nextLyric
+            val displayAlbum = if (next2Lyric.isBlank()) " " else next2Lyric
+            
             return original.buildUpon()
-                // 【最上方 / 最大字 (Title 字段)】：正在唱的当前句（自带 ▶ 高亮与翻译）
-                .setTitle(currentLyric)
+                // 【最上方 (Title 字段)】：正在唱的当前句（或者间奏时的 🎵 ~）
+                .setTitle(displayTitle)
                 
-                // 【中间 / 中等字 (Artist 字段)】：未唱的下一句
-                .setArtist(nextLyric)
+                // 【中间 (Artist 字段)】：未唱的下一句
+                .setArtist(displayArtist)
                 
-                // 【最下方 / 小字 (Album 字段)】：未唱的下下句
-                .setAlbumTitle(next2Lyric)
-                
+                // 【最下方 (Album 字段)】：未唱的下下句
+                .setAlbumTitle(displayAlbum)
                 .build()
         }
+        
+        // 只有当四个字段全都是空的（比如这首歌压根没歌词，或者刚切歌还没读取出来），才显示原歌名歌手
         return original
     }
 }
