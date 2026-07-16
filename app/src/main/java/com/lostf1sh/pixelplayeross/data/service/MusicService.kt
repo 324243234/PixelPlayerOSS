@@ -1283,16 +1283,19 @@ private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
         }
 
 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            // 👇 ====== 3. 车载后台歌词引擎：终极性能优化版 ====== 👇
-            lyricUpdateJob?.cancel() // 切歌时停掉上一首的计算
-            lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ") // 清空车机屏幕
+            // 👇 ====== 3. 车载后台歌词引擎：零延迟秒切 + 终极省电狙击版 ====== 👇
+            lyricUpdateJob?.cancel()
             
             if (mediaItem != null) {
-                // 必须在 Main 主线程启动，Media3 严禁在后台读取播放进度
+                // 🚀 【秒同步核心 1】不等数据库！切歌第 0 毫秒直接用当前歌名“强行霸占”屏幕排版
+                // 这样车机会立刻进入“最大字显示音符 🎵 ~，中等字显示歌名”的状态，视觉延迟降为 0！
+                val songTitle = mediaItem.mediaMetadata.title?.toString() ?: " "
+                lyricPlayerWrapper?.updateLyrics(" ", " ", songTitle, " ")
+                
                 lyricUpdateJob = serviceScope.launch {
                     val songId = mediaItem.mediaId
                     
-                    // 仅把耗时的数据库读取切入 IO 线程
+                    // 仅把耗时的数据库读取切入 IO 线程 (这几百毫秒里，车机已经完美显示了前奏状态)
                     val song = withContext(Dispatchers.IO) { musicRepository.getSong(songId).first() }
                     
                     if (song != null) {
@@ -1302,13 +1305,10 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                         // 如果有滚动歌词，启动引擎
                         if (!syncedLines.isNullOrEmpty()) {
                             
-                            // 🚀 优化1：【内存与CPU释放】在循环外“一次性”清洗所有歌词文本
-                            // 彻底消除原本每秒十几次的正则匹配和字符串频繁拼接！
                             val preProcessedTexts = syncedLines.map { line ->
                                 val cleanText = com.lostf1sh.pixelplayeross.utils.LyricsUtils.stripLrcTimestamps(line.line)
                                     .replace(Regex("^v\\d+:\\s*", RegexOption.IGNORE_CASE), "")
                                     .trimStart()
-                                    
                                 if (!line.translation.isNullOrBlank()) {
                                     "$cleanText\n${line.translation}"
                                 } else {
@@ -1316,15 +1316,15 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                                 }
                             }
 
-                            // 记录上一次显示的索引，防止屏幕无效狂刷
-                            var lastRenderedIndex = -1
+                            // 🚀 【秒同步核心 2】将初始值从 -1 改为 -99，放开对前奏的限制！
+                            var lastRenderedIndex = -99
 
                             while (true) {
                                 val player = mediaSession?.player ?: engine.masterPlayer
                                 
-                                // 🚀 优化2：【降低空转能耗】歌曲暂停时，极大降低检查频率，避免无意义的 CPU 浪费
+                                // 暂停深度休眠
                                 if (!player.isPlaying) {
-                                    kotlinx.coroutines.delay(1000)
+                                    kotlinx.coroutines.delay(1500L)
                                     continue
                                 }
 
@@ -1332,7 +1332,7 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                                 var currentIndex = -1
                                 var timeToNextLine = Long.MAX_VALUE
                                 
-                                // 找当前是哪一句，并计算距离下一句还有多少毫秒
+                                // 找当前是哪一句
                                 for (i in syncedLines.indices) {
                                     val currentLineTime = syncedLines[i].time.toLong()
                                     val nextLineTime = syncedLines.getOrNull(i + 1)?.time?.toLong() ?: Long.MAX_VALUE
@@ -1343,8 +1343,8 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                                     }
                                 }
                                 
-                                // 🚀 优化3：【零无效排版】只在歌词行发生“真实跳变”时，才发送给车机刷新，降低蓝牙带宽占用
-                                if (currentIndex != -1 && currentIndex != lastRenderedIndex) {
+                                // 🚀 这里去掉了 currentIndex != -1，让前奏也能瞬间推送过去！
+                                if (currentIndex != lastRenderedIndex) {
                                     lastRenderedIndex = currentIndex
                                     
                                     fun getText(index: Int): String {
@@ -1359,19 +1359,41 @@ override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                                     )
                                 }
                                 
-                                // 🚀 优化4：【彻底消灭慢一拍】动态智能休眠算法
-                                // 离下一句越近，刷新频率越高（最高达到 50ms 级别）；离得远就保持 200ms。
-                                // 既保证了歌词跳变时的极高精确度，又在长句时节省了性能！
+                                // 🔋【自动挡休眠：修复前奏漏算 BUG】
                                 if (currentIndex != -1 && timeToNextLine != Long.MAX_VALUE) {
-                                    val sleepTime = timeToNextLine.coerceIn(50L, 200L)
-                                    kotlinx.coroutines.delay(sleepTime)
+                                    // 正常唱的时候
+                                    if (timeToNextLine > 1000L) {
+                                        kotlinx.coroutines.delay(800L)
+                                    } else {
+                                        kotlinx.coroutines.delay(timeToNextLine.coerceAtLeast(50L))
+                                    }
+                                } else if (currentIndex == -1) {
+                                    // 🚀 前奏期间：算出距离歌手开口唱第一句，还有多少毫秒！
+                                    val firstLineTime = syncedLines.firstOrNull()?.time?.toLong() ?: 0L
+                                    val timeToFirstLine = firstLineTime - position
+                                    
+                                    if (timeToFirstLine > 1000L) {
+                                        kotlinx.coroutines.delay(800L) // 离第一句还早，省电巡航
+                                    } else if (timeToFirstLine > 0L) {
+                                        kotlinx.coroutines.delay(timeToFirstLine.coerceAtLeast(50L)) // 歌手马上开口，精准狙击！
+                                    } else {
+                                        kotlinx.coroutines.delay(800L)
+                                    }
                                 } else {
-                                    kotlinx.coroutines.delay(200)
+                                    // 最后一句唱完了
+                                    kotlinx.coroutines.delay(800L)
                                 }
                             }
+                        } else {
+                            // 确实没歌词，交还屏幕
+                            lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ")
                         }
+                    } else {
+                        lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ")
                     }
                 }
+            } else {
+                lyricPlayerWrapper?.updateLyrics(" ", " ", " ", " ")
             }
             // 👆 ======================= 引擎植入完毕 ======================= 👆
 
