@@ -160,10 +160,45 @@ fun ScreenWrapper(
         // Conditionally adding/removing this Box when dimAlpha crosses 0 added a node to
         // the composition tree mid-transition and contributed to the outgoing-screen flash.
         Box(
+        modifier = modifier
+            .fillMaxSize()
+            // ... (中间的 graphicsLayer 保持原样不变) ...
+            .graphicsLayer {
+                compositingStrategy = if (shouldRunDepthEffects) {
+                    CompositingStrategy.Offscreen
+                } else {
+                    CompositingStrategy.Auto
+                }
+                if (shouldRunDepthEffects && cornerRadius > 0.5f) {
+                    this.shape = RoundedCornerShape(cornerRadius.dp)
+                    this.clip = true
+                } else {
+                    this.clip = false
+                }
+            }
+            .background(MaterialTheme.colorScheme.background),
+        // 👇 1. 强行让全局页面的内容在平板上居中！
+        contentAlignment = Alignment.TopCenter 
+    ) {
+        
+        // 👇 2. 新增一个内层容器，锁死整个 App 所有页面的最大宽度为 840dp！
+        Box(
             modifier = Modifier
-                .fillMaxSize()
+                .widthIn(max = 840.dp) // 平板上的“安全展示宽度”
+                .fillMaxHeight()
+        ) {
+            content() // 这里面就是你的 HomeScreen, StatsScreen, DailyMixScreen 等所有页面
+        }
+
+        // Dim Layer Overlay (全局变暗遮罩)
+        Box(
+            modifier = Modifier
+                .fillMaxSize() // 遮罩依然铺满整个屏幕
                 .graphicsLayer { alpha = dimAlpha }
                 .background(Color.Black)
+        )
+    }
+}
         )
     }
 }

@@ -196,6 +196,8 @@ fun QuickFillContent(
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)
                 .padding(bottom = 16.dp) // System bars handling?
+                // 👇 新增这一行：强制底部操作栏最大宽度不超过 600dp
+                .widthIn(max = 600.dp)
                 .fillMaxWidth()
                 .height(64.dp)
                 .imePadding(),
