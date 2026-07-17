@@ -1,11 +1,9 @@
 package com.lostf1sh.pixelplayeross.presentation.screens
 
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafelyReplacing
-
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import android.content.Intent
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.foundation.background
@@ -300,45 +298,39 @@ fun HomeScreen(
     // Drawer state for sidebar
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
+    // 获取屏幕方向
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
-                HomeGradientTopBar(
-                    onNavigationIconClick = {
-                        navController.navigateSafely(Screen.Settings.route)
-                    },
-                    onMoreOptionsClick = {
-                        showChangelogBottomSheet = true
-                    },
-                    onBetaClick = {
-                        showBetaInfoBottomSheet = true
-                    },
-                    onStreamingClick = {
-                          showStreamingProviderSheet = true
-                    },
-                    onMenuClick = {
-                        // onOpenSidebar() // Disabled
-                    },
-                    isScrolled = isScrolledPastThreshold.value
-                )
+                // 横屏时不显示顶部栏，省出空间
+                if (!isLandscape) {
+                    HomeGradientTopBar(
+                        onNavigationIconClick = { navController.navigateSafely(Screen.Settings.route) },
+                        onMoreOptionsClick = { showChangelogBottomSheet = true },
+                        onBetaClick = { showBetaInfoBottomSheet = true },
+                        onStreamingClick = { showStreamingProviderSheet = true },
+                        onMenuClick = {},
+                        isScrolled = isScrolledPastThreshold.value
+                    )
+                }
             }
         ) { innerPadding ->
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .wrapContentWidth(Alignment.CenterHorizontally) // 👈 1. 打破平板的强制横向拉伸
-                    .widthIn(max = 840.dp)                          // 👈 2. 锁死最大宽度
                     .background(MaterialTheme.colorScheme.background),
                 contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
-                    bottom = paddingValuesParent.calculateBottomPadding()
-                            + 38.dp + bottomPadding
+                    top = if (isLandscape) 12.dp else innerPadding.calculateTopPadding(),
+                    bottom = paddingValuesParent.calculateBottomPadding() + (if (isLandscape) 16.dp else 38.dp) + bottomPadding
                 ),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(if (isLandscape) 12.dp else 24.dp)
             ) {
                 if (yourMixSongs.isEmpty()) {
                     item(
@@ -403,8 +395,8 @@ fun HomeScreen(
                         AlbumArtCollage(
                             modifier = Modifier.fillMaxWidth(),
                             songs = yourMixSongs,
-                            padding = 14.dp,
-                            height = 400.dp,
+                            padding = if (isLandscape) 8.dp else 14.dp,
+                            height = if (isLandscape) 180.dp else 400.dp, // 横屏时变矮
                             pattern = activePattern,
                             onSongClick = { song ->
                                 if (usesFallbackHomeMix) {
@@ -664,31 +656,31 @@ fun YourMixHeader(
 ) {
     val buttonCorners = 68.dp
     val colors = MaterialTheme.colorScheme
-
     val titleStyle = rememberYourMixTitleStyle()
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .wrapContentWidth(Alignment.CenterHorizontally) // 👈 1. 打破拉伸并居中
-                .widthIn(max = 840.dp)                          // 👈 2. 锁死最大宽度
-                .heightIn(min = 160.dp, max = 256.dp)           // 👈 3. 解除写死的高度，变为弹性
-            .padding(16.dp)
+            .height(if (isLandscape) 120.dp else 256.dp) // 横屏变矮
+            .padding(if (isLandscape) 8.dp else 16.dp)
     ) {
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(top = 48.dp, start = 12.dp)
+                .padding(top = if (isLandscape) 12.dp else 48.dp, start = 12.dp)
         ) {
-            // Your Mix Title
             Text(
                 text = stringResource(R.string.home_your_mix_title),
-                style = titleStyle,
+                style = titleStyle.copy(
+                    fontSize = if (isLandscape) 36.sp else 64.sp, // 横屏字体变小
+                    lineHeight = if (isLandscape) 38.sp else 62.sp
+                ),
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
             )
-
-            // Artist/Song subtitle
             Text(
                 text = song,
                 style = MaterialTheme.typography.bodyMedium,
@@ -696,29 +688,23 @@ fun YourMixHeader(
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
-        // Play Button - color changes based on shuffle state
+        
         LargeExtendedFloatingActionButton(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 12.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp),
             onClick = onPlayShuffled,
             containerColor = if (isShuffleEnabled) colors.primary else colors.tertiaryContainer,
             contentColor = if (isShuffleEnabled) colors.onPrimary else colors.onTertiaryContainer,
             shape = AbsoluteSmoothCornerShape(
-                cornerRadiusTL = buttonCorners,
-                smoothnessAsPercentTR = 60,
-                cornerRadiusBR = buttonCorners,
-                smoothnessAsPercentTL = 60,
-                cornerRadiusBL = buttonCorners,
-                smoothnessAsPercentBR = 60,
-                cornerRadiusTR = buttonCorners,
-                smoothnessAsPercentBL = 60,
+                cornerRadiusTL = buttonCorners, smoothnessAsPercentTR = 60,
+                cornerRadiusBR = buttonCorners, smoothnessAsPercentTL = 60,
+                cornerRadiusBL = buttonCorners, smoothnessAsPercentBR = 60,
+                cornerRadiusTR = buttonCorners, smoothnessAsPercentBL = 60,
             )
         ) {
             Icon(
                 painter = painterResource(R.drawable.rounded_shuffle_24),
                 contentDescription = stringResource(R.string.cd_shuffle_play),
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(if (isLandscape) 28.dp else 36.dp)
             )
         }
     }

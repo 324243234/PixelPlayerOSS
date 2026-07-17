@@ -1,8 +1,10 @@
 package com.lostf1sh.pixelplayeross
 
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.zIndex.zIndex
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.foundation.layout.Row
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
@@ -704,6 +706,10 @@ class MainActivity : ComponentActivity() {
             LocalAppHapticsConfig provides appHapticsConfig,
             LocalHapticFeedback provides scopedHapticFeedback
         ) {
+            // 💡 1. 自动检测是不是横屏/车机
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
             AppSidebarDrawer(
                 drawerState = drawerState,
                 selectedRoute = currentRoute ?: Screen.Home.route,
@@ -717,15 +723,47 @@ class MainActivity : ComponentActivity() {
                         DrawerDestination.Settings -> navController.navigateSafely(Screen.Settings.route)
                     }
                 }
-        ) {
+            ) {
+                // 💡 2. 用 Row 把屏幕左右切开
+                Row(modifier = Modifier.fillMaxSize()) {
+                    
+                    // 💡 3. 如果是横屏，在最左侧显示菜单
+                    if (isLandscape && shouldRenderNavigationBar) {
+                        NavigationRail(
+                            modifier = Modifier.zIndex(10f),
+                            containerColor = NavigationBarDefaults.containerColor
+                        ) {
+                            Spacer(Modifier.weight(1f))
+                            commonNavItems.forEach { item ->
+                                val selected = currentRoute == item.screen.route
+                                NavigationRailItem(
+                                    selected = selected,
+                                    onClick = { 
+                                        navController.navigateSafely(item.screen.route) {
+                                            popUpTo(Screen.Home.route) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = {
+                                        androidx.compose.material3.Icon(
+                                            painter = androidx.compose.ui.res.painterResource(if (selected) item.selectedIconResId ?: item.iconResId else item.iconResId),
+                                            contentDescription = item.label
+                                        )
+                                    },
+                                    label = { Text(item.label) }
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
 
-                Scaffold(
-                modifier = Modifier
-                        .fillMaxSize() // 先铺满屏幕以占据空间
-                        .wrapContentWidth(Alignment.CenterHorizontally) // 解除强制横向拉伸，并让它在屏幕中间对齐
-                        .widthIn(max = 840.dp), // 终极安全锁：最宽绝对不允许超过 840dp！
-                bottomBar = {
-                    if (shouldRenderNavigationBar) {
+                    // 💡 4. 原来的页面内容放在右边
+                    Scaffold(
+                        modifier = Modifier.weight(1f),
+                        bottomBar = {
+                            // 💡 5. 只有在“不是横屏”时，才显示原来的底部菜单
+                            if (!isLandscape && shouldRenderNavigationBar) {
                         val currentSongId by remember {
                             playerViewModel.stablePlayerState
                                 .map { it.currentSong?.id }

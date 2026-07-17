@@ -1,8 +1,5 @@
 package com.lostf1sh.pixelplayeross.presentation.components
 
-import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -125,8 +122,6 @@ fun ScreenWrapper(
 
     // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
     val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
-    // Dim: If strictly behind Top -> 0.4f. Else -> 0f.
-    
     val dimAlpha by animateFloatAsState(
         targetValue = targetDim,
         animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
@@ -136,6 +131,13 @@ fun ScreenWrapper(
     Box(
         modifier = modifier
             .fillMaxSize()
+            // Keep both the graphicsLayer modifier AND its compositingStrategy stable across
+            // the full lifecycle of the screen. Toggling the strategy between Auto and
+            // Offscreen mid-transition (when cornerRadius crosses the threshold) causes the
+            // RenderNode's rendering mode to flip for one frame, producing a subtle flash on
+            // the outgoing screen right as the animation starts. Main root tab switches are
+            // the exception: Home/Search/Library keep the same slide/fade transition, but skip
+            // the expensive offscreen depth layer while no deeper screen is visible.
             .graphicsLayer {
                 compositingStrategy = if (shouldRunDepthEffects) {
                     CompositingStrategy.Offscreen
@@ -149,18 +151,14 @@ fun ScreenWrapper(
                     this.clip = false
                 }
             }
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.TopCenter
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 840.dp)
-                .fillMaxHeight()
-        ) {
-            content()
-        }
+        content()
 
         // Dim Layer Overlay
+        // Always composed with alpha-driven visibility instead of a conditional node.
+        // Conditionally adding/removing this Box when dimAlpha crosses 0 added a node to
+        // the composition tree mid-transition and contributed to the outgoing-screen flash.
         Box(
             modifier = Modifier
                 .fillMaxSize()
