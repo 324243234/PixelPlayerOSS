@@ -1,7 +1,7 @@
 package com.lostf1sh.pixelplayeross
 
 import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
-import androidx.compose.ui.zIndex.zIndex
+
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.foundation.layout.Row
@@ -731,7 +731,7 @@ class MainActivity : ComponentActivity() {
                     // 👇 左侧：如果是横屏，显示侧边栏 (NavigationRail)
                     if (isLandscape && shouldRenderNavigationBar) {
                         NavigationRail(
-                            modifier = Modifier.zIndex(10f),
+                            modifier = Modifier,
                             containerColor = NavigationBarDefaults.containerColor
                         ) {
                             Spacer(Modifier.weight(1f))
@@ -913,7 +913,7 @@ class MainActivity : ComponentActivity() {
                                     playerViewModel.playerContentExpansionFraction.value > 0.01f
                                 }
                             }
-                            AnimatedVisibility(
+                            androidx.compose.animation.AnimatedVisibility(
                                 visible = isExpandedOrExpanding,
                                 enter = fadeIn(animationSpec = tween(durationMillis = 350)),
                                 exit = fadeOut(animationSpec = tween(durationMillis = 350)),
@@ -962,7 +962,7 @@ class MainActivity : ComponentActivity() {
                                 { playerViewModel.hideDismissUndoBar() }
                             }
 
-                            AnimatedVisibility(
+                            androidx.compose.animation.AnimatedVisibility(
                                 visible = dismissUndoBarSlice.isVisible,
                                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
